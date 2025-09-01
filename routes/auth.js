@@ -3,9 +3,9 @@ const router = express.Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-// --- IMPORTACIÓN CORREGIDA ---
-// Importamos las clases específicas que necesitamos de la librería de Brevo
-const { ApiClient, TransactionalEmailsApi, SendSmtpEmail } = require('@getbrevo/brevo');
+// --- IMPORTACIÓN AJUSTADA ---
+// Apuntamos directamente al archivo principal del paquete para evitar problemas de módulos
+const Brevo = require('@getbrevo/brevo/src/index');
 const Usuario = require('../models/Usuario');
 
 // --- RUTA DE REGISTRO ---
@@ -63,7 +63,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// --- RUTA PARA SOLICITAR RECUPERACIÓN DE CONTRASEÑA (VERSIÓN CORREGIDA) ---
+// --- RUTA PARA SOLICITAR RECUPERACIÓN DE CONTRASEÑA (VERSIÓN AJUSTADA) ---
 // POST /api/auth/forgot-password
 router.post('/forgot-password', async (req, res) => {
     try {
@@ -77,7 +77,7 @@ router.post('/forgot-password', async (req, res) => {
         const resetToken = crypto.randomBytes(20).toString('hex');
         
         usuario.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-        usuario.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutos
+        usuario.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
         await usuario.save();
 
         const resetUrl = `https://proyectowebll.vercel.app/reset-password/${resetToken}`;
@@ -88,13 +88,13 @@ router.post('/forgot-password', async (req, res) => {
             <p>Este enlace expirará en 10 minutos.</p>
         `;
 
-        // --- LÓGICA DE ENVÍO CORREGIDA ---
-        const defaultClient = ApiClient.instance;
-        const apiKey = defaultClient.authentications['api-key'];
+        // --- LÓGICA DE ENVÍO AJUSTADA ---
+        let defaultClient = Brevo.ApiClient.instance;
+        let apiKey = defaultClient.authentications['api-key'];
         apiKey.apiKey = process.env.BREVO_API_KEY;
 
-        const apiInstance = new TransactionalEmailsApi();
-        const sendSmtpEmail = new SendSmtpEmail();
+        let apiInstance = new Brevo.TransactionalEmailsApi();
+        let sendSmtpEmail = new Brevo.SendSmtpEmail();
 
         sendSmtpEmail.subject = "Reseteo de Contraseña - Fresas con Crema";
         sendSmtpEmail.htmlContent = messageHtml;
