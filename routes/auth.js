@@ -3,13 +3,10 @@ const router = express.Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-// --- IMPORTACIÓN AJUSTADA ---
-// Apuntamos directamente al archivo principal del paquete para evitar problemas de módulos
-const Brevo = require('@getbrevo/brevo/src/index');
+const axios = require('axios'); // <-- IMPORTAR AXIOS
 const Usuario = require('../models/Usuario');
 
 // --- RUTA DE REGISTRO ---
-// POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
     const { nombre, correo, password, rol } = req.body;
@@ -29,7 +26,6 @@ router.post('/register', async (req, res) => {
 });
 
 // --- RUTA DE LOGIN ---
-// POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
     const { correo, password } = req.body;
@@ -63,8 +59,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// --- RUTA PARA SOLICITAR RECUPERACIÓN DE CONTRASEÑA (VERSIÓN AJUSTADA) ---
-// POST /api/auth/forgot-password
+// --- RUTA PARA SOLICITAR RECUPERACIÓN DE CONTRASEÑA (VERSIÓN AXIOS) ---
 router.post('/forgot-password', async (req, res) => {
     try {
         const { correo } = req.body;
@@ -88,31 +83,34 @@ router.post('/forgot-password', async (req, res) => {
             <p>Este enlace expirará en 10 minutos.</p>
         `;
 
-        // --- LÓGICA DE ENVÍO AJUSTADA ---
-        let defaultClient = Brevo.ApiClient.instance;
-        let apiKey = defaultClient.authentications['api-key'];
-        apiKey.apiKey = process.env.BREVO_API_KEY;
-
-        let apiInstance = new Brevo.TransactionalEmailsApi();
-        let sendSmtpEmail = new Brevo.SendSmtpEmail();
-
-        sendSmtpEmail.subject = "Reseteo de Contraseña - Fresas con Crema";
-        sendSmtpEmail.htmlContent = messageHtml;
-        sendSmtpEmail.sender = { name: "Fresas con Crema", email: "noreply@fresas.com" };
-        sendSmtpEmail.to = [{ email: usuario.correo, name: usuario.nombre }];
+        // --- LÓGICA DE ENVÍO CON AXIOS ---
+        const brevoApiUrl = 'https://api.brevo.com/v3/smtp/email';
         
-        await apiInstance.sendTransacEmail(sendSmtpEmail);
+        const emailData = {
+            sender: { name: "Fresas con Crema", email: "noreply@fresas.com" },
+            to: [{ email: usuario.correo, name: usuario.nombre }],
+            subject: "Reseteo de Contraseña - Fresas con Crema",
+            htmlContent: messageHtml,
+        };
+
+        const headers = {
+            'accept': 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json',
+        };
+
+        await axios.post(brevoApiUrl, emailData, { headers });
         
         res.status(200).json({ message: 'Correo de recuperación enviado.' });
 
     } catch (err) {
-        console.error("Error en /forgot-password:", err);
+        // Axios muestra errores detallados, los veremos en los logs
+        console.error("Error en /forgot-password:", err.response ? err.response.data : err.message);
         res.status(500).send('Error en el servidor al procesar la solicitud.');
     }
 });
 
 // --- RUTA PARA RESETEAR LA CONTRASEÑA CON EL TOKEN ---
-// POST /api/auth/reset-password/:token
 router.post('/reset-password/:token', async (req, res) => {
     try {
         const resetPasswordToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
