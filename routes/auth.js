@@ -3,7 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const axios = require('axios'); // <-- IMPORTAR AXIOS
+const axios = require('axios');
 const Usuario = require('../models/Usuario');
 
 // --- RUTA DE REGISTRO ---
@@ -83,11 +83,13 @@ router.post('/forgot-password', async (req, res) => {
             <p>Este enlace expirará en 10 minutos.</p>
         `;
 
-        // --- LÓGICA DE ENVÍO CON AXIOS ---
         const brevoApiUrl = 'https://api.brevo.com/v3/smtp/email';
         
         const emailData = {
-            sender: { name: "Fresas con Crema", email: "noreply@fresas.com" },
+            // --- CAMBIO IMPORTANTE AQUÍ ---
+            // Reemplaza "tu-correo@de-brevo.com" con el email que usaste para registrarte en Brevo.
+            // O usa la variable de entorno SMTP_USER si la tienes configurada con ese email.
+            sender: { name: "Fresas con Crema", email: process.env.SMTP_USER },
             to: [{ email: usuario.correo, name: usuario.nombre }],
             subject: "Reseteo de Contraseña - Fresas con Crema",
             htmlContent: messageHtml,
@@ -104,7 +106,6 @@ router.post('/forgot-password', async (req, res) => {
         res.status(200).json({ message: 'Correo de recuperación enviado.' });
 
     } catch (err) {
-        // Axios muestra errores detallados, los veremos en los logs
         console.error("Error en /forgot-password:", err.response ? err.response.data : err.message);
         res.status(500).send('Error en el servidor al procesar la solicitud.');
     }
