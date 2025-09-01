@@ -3,7 +3,9 @@ const router = express.Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const Brevo = require('@getbrevo/brevo'); // Importamos la nueva librería de Brevo
+// --- IMPORTACIÓN CORREGIDA ---
+// Importamos las clases específicas que necesitamos de la librería de Brevo
+const { ApiClient, TransactionalEmailsApi, SendSmtpEmail } = require('@getbrevo/brevo');
 const Usuario = require('../models/Usuario');
 
 // --- RUTA DE REGISTRO ---
@@ -61,7 +63,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// --- RUTA PARA SOLICITAR RECUPERACIÓN DE CONTRASEÑA (VERSIÓN API DE BREVO) ---
+// --- RUTA PARA SOLICITAR RECUPERACIÓN DE CONTRASEÑA (VERSIÓN CORREGIDA) ---
 // POST /api/auth/forgot-password
 router.post('/forgot-password', async (req, res) => {
     try {
@@ -75,7 +77,7 @@ router.post('/forgot-password', async (req, res) => {
         const resetToken = crypto.randomBytes(20).toString('hex');
         
         usuario.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-        usuario.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+        usuario.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutos
         await usuario.save();
 
         const resetUrl = `https://proyectowebll.vercel.app/reset-password/${resetToken}`;
@@ -86,17 +88,17 @@ router.post('/forgot-password', async (req, res) => {
             <p>Este enlace expirará en 10 minutos.</p>
         `;
 
-        // --- LÓGICA DE ENVÍO CON LA API DE BREVO ---
-        const defaultClient = Brevo.ApiClient.instance;
+        // --- LÓGICA DE ENVÍO CORREGIDA ---
+        const defaultClient = ApiClient.instance;
         const apiKey = defaultClient.authentications['api-key'];
         apiKey.apiKey = process.env.BREVO_API_KEY;
 
-        const apiInstance = new Brevo.TransactionalEmailsApi();
-        const sendSmtpEmail = new Brevo.SendSmtpEmail();
+        const apiInstance = new TransactionalEmailsApi();
+        const sendSmtpEmail = new SendSmtpEmail();
 
         sendSmtpEmail.subject = "Reseteo de Contraseña - Fresas con Crema";
         sendSmtpEmail.htmlContent = messageHtml;
-        sendSmtpEmail.sender = { name: "Fresas con Crema", email: "noreply@fresas.com" }; // Un email genérico
+        sendSmtpEmail.sender = { name: "Fresas con Crema", email: "noreply@fresas.com" };
         sendSmtpEmail.to = [{ email: usuario.correo, name: usuario.nombre }];
         
         await apiInstance.sendTransacEmail(sendSmtpEmail);
@@ -124,7 +126,6 @@ router.post('/reset-password/:token', async (req, res) => {
             return res.status(400).json({ message: 'El token es inválido o ha expirado.' });
         }
 
-        // La contraseña debe tener al menos 6 caracteres
         if (!req.body.password || req.body.password.length < 6) {
             return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres.' });
         }
