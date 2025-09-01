@@ -7,6 +7,7 @@ const axios = require('axios');
 const Usuario = require('../models/Usuario');
 
 // --- RUTA DE REGISTRO ---
+// POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
     const { nombre, correo, password, rol } = req.body;
@@ -26,6 +27,7 @@ router.post('/register', async (req, res) => {
 });
 
 // --- RUTA DE LOGIN ---
+// POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
     const { correo, password } = req.body;
@@ -66,13 +68,14 @@ router.post('/forgot-password', async (req, res) => {
         const usuario = await Usuario.findOne({ correo });
 
         if (!usuario) {
+            // No revelamos si el correo existe o no por seguridad
             return res.status(200).json({ message: 'Si el correo está registrado, se enviará un enlace de recuperación.' });
         }
 
         const resetToken = crypto.randomBytes(20).toString('hex');
         
         usuario.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-        usuario.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+        usuario.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutos
         await usuario.save();
 
         const resetUrl = `https://proyectowebll.vercel.app/reset-password/${resetToken}`;
@@ -86,9 +89,9 @@ router.post('/forgot-password', async (req, res) => {
         const brevoApiUrl = 'https://api.brevo.com/v3/smtp/email';
         
         const emailData = {
-            // --- CAMBIO IMPORTANTE AQUÍ ---
-            // Reemplaza "tu-correo@de-brevo.com" con el email que usaste para registrarte en Brevo.
-            // O usa la variable de entorno SMTP_USER si la tienes configurada con ese email.
+            // ¡LÍNEA CORREGIDA!
+            // Ahora usa el correo verificado de tus variables de entorno.
+            // Asegúrate de que SMTP_USER en Railway sea tu correo de Brevo.
             sender: { name: "Fresas con Crema", email: process.env.SMTP_USER },
             to: [{ email: usuario.correo, name: usuario.nombre }],
             subject: "Reseteo de Contraseña - Fresas con Crema",
@@ -112,6 +115,7 @@ router.post('/forgot-password', async (req, res) => {
 });
 
 // --- RUTA PARA RESETEAR LA CONTRASEÑA CON EL TOKEN ---
+// POST /api/auth/reset-password/:token
 router.post('/reset-password/:token', async (req, res) => {
     try {
         const resetPasswordToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
