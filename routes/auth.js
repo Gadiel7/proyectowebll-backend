@@ -3,7 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
+const Brevo = require('@getbrevo/brevo'); // Importamos la nueva librería de Brevo
 const Usuario = require('../models/Usuario');
 
 // --- RUTA DE REGISTRO ---
@@ -21,7 +21,7 @@ router.post('/register', async (req, res) => {
     await usuario.save();
     res.status(201).json({ message: 'Usuario registrado exitosamente.' });
   } catch (err) {
-    console.error(err.message);
+    console.error("Error en /register:", err.message);
     res.status(500).send('Error en el servidor');
   }
 });
@@ -56,12 +56,12 @@ router.post('/login', async (req, res) => {
       }
     );
   } catch (err) {
-    console.error(err.message);
+    console.error("Error en /login:", err.message);
     res.status(500).send('Error en el servidor');
   }
 });
 
-// --- RUTA PARA SOLICITAR RECUPERACIÓN DE CONTRASEÑA ---
+// --- RUTA PARA SOLICITAR RECUPERACIÓN DE CONTRASEÑA (VERSIÓN API DE BREVO) ---
 // POST /api/auth/forgot-password
 router.post('/forgot-password', async (req, res) => {
     try {
@@ -75,47 +75,37 @@ router.post('/forgot-password', async (req, res) => {
         const resetToken = crypto.randomBytes(20).toString('hex');
         
         usuario.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-        usuario.resetPasswordExpire = Date.now() + 10 * 60 * 1000; 
-
+        usuario.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
         await usuario.save();
 
         const resetUrl = `https://proyectowebll.vercel.app/reset-password/${resetToken}`;
-        const message = `
+        const messageHtml = `
             <h1>Has solicitado un reseteo de contraseña</h1>
             <p>Por favor, haz clic en el siguiente enlace para resetear tu contraseña:</p>
             <a href="${resetUrl}" clicktracking="off">${resetUrl}</a>
             <p>Este enlace expirará en 10 minutos.</p>
         `;
 
-        const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: process.env.SMTP_PORT,
-            auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS
-            }
-        });
+        // --- LÓGICA DE ENVÍO CON LA API DE BREVO ---
+        const defaultClient = Brevo.ApiClient.instance;
+        const apiKey = defaultClient.authentications['api-key'];
+        apiKey.apiKey = process.env.BREVO_API_KEY;
 
-        await transporter.sendMail({
-            from: `"Fresas con Crema" <${process.env.SMTP_USER}>`,
-            to: usuario.correo,
-            subject: 'Reseteo de Contraseña',
-            html: message
-        });
+        const apiInstance = new Brevo.TransactionalEmailsApi();
+        const sendSmtpEmail = new Brevo.SendSmtpEmail();
 
+        sendSmtpEmail.subject = "Reseteo de Contraseña - Fresas con Crema";
+        sendSmtpEmail.htmlContent = messageHtml;
+        sendSmtpEmail.sender = { name: "Fresas con Crema", email: "noreply@fresas.com" }; // Un email genérico
+        sendSmtpEmail.to = [{ email: usuario.correo, name: usuario.nombre }];
+        
+        await apiInstance.sendTransacEmail(sendSmtpEmail);
+        
         res.status(200).json({ message: 'Correo de recuperación enviado.' });
 
     } catch (err) {
-        console.error(err.message);
-        if (req.body.correo) {
-            const usuario = await Usuario.findOne({ correo: req.body.correo });
-            if (usuario) {
-                usuario.resetPasswordToken = undefined;
-                usuario.resetPasswordExpire = undefined;
-                await usuario.save();
-            }
-        }
-        res.status(500).send('Error en el servidor');
+        console.error("Error en /forgot-password:", err);
+        res.status(500).send('Error en el servidor al procesar la solicitud.');
     }
 });
 
@@ -134,6 +124,11 @@ router.post('/reset-password/:token', async (req, res) => {
             return res.status(400).json({ message: 'El token es inválido o ha expirado.' });
         }
 
+        // La contraseña debe tener al menos 6 caracteres
+        if (!req.body.password || req.body.password.length < 6) {
+            return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres.' });
+        }
+
         const salt = await bcrypt.genSalt(10);
         usuario.password = await bcrypt.hash(req.body.password, salt);
         
@@ -145,7 +140,7 @@ router.post('/reset-password/:token', async (req, res) => {
         res.status(200).json({ message: 'Contraseña actualizada exitosamente.' });
 
     } catch (err) {
-        console.error(err.message);
+        console.error("Error en /reset-password:", err.message);
         res.status(500).send('Error en el servidor');
     }
 });
