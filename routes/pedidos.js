@@ -84,5 +84,23 @@ router.delete('/:id', auth, async (req, res) => {
         res.status(500).json({ message: 'Error en el servidor' });
     }
 });
-
+// routes/pedidos.js
+// ...
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const pedidoActualizado = await Pedido.findByIdAndUpdate(
+      req.params.id, 
+      { estado: req.body.estado },
+      { new: true }
+    );
+    // ...
+    if (pedidoActualizado.user) {
+        // --- AÑADE ESTA LÍNEA ---
+        console.log(`Emitiendo 'pedido_actualizado' a la sala: ${pedidoActualizado.user.toString()}`);
+        req.io.to(pedidoActualizado.user.toString()).emit('pedido_actualizado', pedidoActualizado);
+    }
+    res.json(pedidoActualizado);
+  } catch (err) { /* ... */ }
+});
+// ...
 module.exports = router;
